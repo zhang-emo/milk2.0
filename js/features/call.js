@@ -341,11 +341,11 @@
 }
 .call-mini-hangup:hover{background:#ff5252;transform:scale(1.12);}
 
-#call-toolbar-btn{
+#call-toolbar-btn:not(.chat-expand-card){
     background-color:var(--toolbar-btn-bg, var(--message-received-bg)) !important;
     color:var(--toolbar-btn-color, var(--text-secondary)) !important;
 }
-#call-toolbar-btn:hover{color:var(--text-primary) !important;}
+#call-toolbar-btn:not(.chat-expand-card):hover{color:var(--text-primary) !important;}
 body.bottom-collapse-mode #call-toolbar-btn{display:none !important;}
 
 html[data-theme="dark"][data-color-theme="black-white"]{
@@ -479,21 +479,26 @@ html:not([data-theme="dark"])[data-color-theme="black-white"] .message-sent{
     }
 
     function injectToolbarBtn() {
-        if (document.getElementById('call-toolbar-btn')) return;
-        const anchor = document.getElementById('attachment-btn');
-        if (!anchor) return;
-        const btn = document.createElement('button');
-        btn.id = 'call-toolbar-btn';
-        btn.title = '视频通话';
-        btn.className = 'input-btn collapse-hideable';
+        let btn = document.getElementById('call-toolbar-btn');
+        if (!btn) {
+            const anchor = document.getElementById('attachment-btn');
+            if (!anchor) return;
+            btn = document.createElement('button');
+            btn.id = 'call-toolbar-btn';
+            btn.title = '视频通话';
+            btn.className = 'chat-expand-card chat-expand-item-btn';
+            btn.innerHTML = `<div class="chat-expand-icon-box"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg></div><span class="chat-expand-card-label">视频通话</span>`;
+            anchor.parentNode.insertBefore(btn, anchor);
+        }
         btn.style.display = S.enabled ? '' : 'none';
-        btn.innerHTML = '<i class="fas fa-video"></i>';
-        btn.addEventListener('click', () => {
-            if (!S.enabled) return;
-            if (S.active) { restoreWindow(); return; }
-            startCall(false);
-        });
-        anchor.parentNode.insertBefore(btn, anchor);
+        if (!btn._callBound) {
+            btn._callBound = true;
+            btn.addEventListener('click', () => {
+                if (!S.enabled) return;
+                if (S.active) { restoreWindow(); return; }
+                startCall(false);
+            });
+        }
     }
 
     function fmt(ms) {

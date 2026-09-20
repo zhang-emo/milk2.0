@@ -824,7 +824,7 @@ function manageAutoSendTimer() {
             const id = el.getAttribute('data-reply-id');
             if (!id) return;
             const tryScroll = () => {
-                const target = document.querySelector(`[data-msg-id="${id}"]`);
+                const target = document.querySelector(`[data-msg-id="${id}"]`) || document.querySelector(`[data-id="${id}"]`);
                 if (target) {
                     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     target.classList.add('msg-highlight');
@@ -842,7 +842,7 @@ function manageAutoSendTimer() {
                 const needed = messages.length - msgIndex;
                 if (needed > displayedMessageCount) {
                     displayedMessageCount = needed;
-                    renderMessages(false);
+                    renderMessages(true);
                     setTimeout(tryScroll, 150);
                 } else {
                     if (typeof showNotification === 'function') showNotification('消息可能已被删除', 'info');
@@ -1186,6 +1186,19 @@ actionsHTML += `<button class="meta-action-btn delete-btn" title="删除"><i cla
             });
         }
 
+        window.clearActiveReplyTimers = function() {
+            if (window._pendingReplyTimer) {
+                clearTimeout(window._pendingReplyTimer);
+                window._pendingReplyTimer = null;
+            }
+            if (Array.isArray(window._activeReplyTimers)) {
+                window._activeReplyTimers.forEach(id => {
+                    try { clearTimeout(id); } catch (e) {}
+                });
+                window._activeReplyTimers = [];
+            }
+        };
+
         window.updateReplyPreview = function() {
             const container = DOMElements.replyPreviewContainer;
             if (!container) return;
@@ -1195,7 +1208,7 @@ actionsHTML += `<button class="meta-action-btn delete-btn" title="删除"><i cla
                 return;
             }
             const senderName = currentReplyTo.sender === 'user' ? (settings.myName || '我') : (settings.partnerName || '对方');
-            const previewText = currentReplyTo.text ? currentReplyTo.text.slice(0, 40) : '🖼 图片';
+            const previewText = currentReplyTo.text ? currentReplyTo.text.slice(0, 40) : (currentReplyTo.image ? '🖼 图片' : '[消息]');
             container.style.display = 'flex';
             container.innerHTML = `
                 <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(var(--accent-color-rgb),0.07);border-left:3px solid var(--accent-color);border-radius:0 8px 8px 0;width:100%;">
@@ -1208,15 +1221,19 @@ actionsHTML += `<button class="meta-action-btn delete-btn" title="删除"><i cla
         };
         function updateReplyPreview() { window.updateReplyPreview(); }
 
-        function sendMessage(textOverride = null, type = 'normal') {
-            const text = textOverride || DOMElements.messageInput.value.trim();
-            const imageFile = DOMElements.imageInput.files[0];
-            if (!text && !imageFile && type === 'normal') return;
+        function sendMessage(textOverride = null, type = 'normal', imageOverride = null) {
+            const text = textOverride !== null ? textOverride : (DOMElements.messageInput ? DOMElements.messageInput.value.trim() : '');
+            const imageFile = DOMElements.imageInput ? DOMElements.imageInput.files[0] : null;
+            if (!text && !imageFile && !imageOverride && type === 'normal') return;
 
-            DOMElements.messageInput.value = '';
-            DOMElements.messageInput.style.height = '46px';
+            if (DOMElements.messageInput) {
+                DOMElements.messageInput.value = '';
+                DOMElements.messageInput.style.height = '46px';
+            }
             if (imageFile && imageFile.size > MAX_IMAGE_SIZE) {
-                showNotification('图片大小不能超过5MB', 'error'); DOMElements.imageInput.value = ''; return;
+                showNotification('图片大小不能超过5MB', 'error'); 
+                if (DOMElements.imageInput) DOMElements.imageInput.value = ''; 
+                return;
             }
 
             const createMessage = (imgSrc = null) => {
@@ -1239,63 +1256,63 @@ actionsHTML += `<button class="meta-action-btn delete-btn" title="删除"><i cla
                 currentReplyTo = null;
                 updateReplyPreview();
 
-if (!isBatchMode && type === 'normal') {
-    const delayRange = settings.replyDelayMax - settings.replyDelayMin;
-    const randomDelay = settings.replyDelayMin + Math.random() * delayRange;
+                if (!isBatchMode && type === 'normal') {
+                    // 清除上一轮未完成的回复计时器，避免多重回复交错混乱
+                    if (typeof window.clearActiveReplyTimers === 'function') {
+                        window.clearActiveReplyTimers();
+                    }
 
-    const chance = Math.max(0, Math.min(1, Number(settings.readNoReplyChance) || 0));
-    const shouldIgnore = settings.allowReadNoReply && (Math.random() < chance);
+                    const delayRange = settings.replyDelayMax - settings.replyDelayMin;
+                    const randomDelay = settings.replyDelayMin + Math.random() * delayRange;
 
-    const readDelay = 1500 + Math.random() * 2500;
-                setTimeout(() => {
-        let changed = false;
-        messages.forEach(msg => {
-            if (msg.sender === 'user' && msg.status !== 'read') {
-                msg.status = 'read';
-                changed = true;
-            }
-        });
-        if (changed) { renderMessages(false); throttledSaveData(); }
-    }, readDelay);
+                    const chance = Math.max(0, Math.min(1, Number(settings.readNoReplyChance) || 0));
+                    const shouldIgnore = settings.allowReadNoReply && (Math.random() < chance);
 
-    if (window._pendingReplyTimer) clearTimeout(window._pendingReplyTimer);
-    window._pendingReplyTimer = null;
-    if (window._simulateReplyTimers && window._simulateReplyTimers.length) {
-        window._simulateReplyTimers.forEach(t => clearTimeout(t));
-        window._simulateReplyTimers = [];
-    }
+                    const readDelay = Math.min(randomDelay * 0.6, 1500 + Math.random() * 2000);
+                    setTimeout(() => {
+                        let changed = false;
+                        messages.forEach(msg => {
+                            if (msg.sender === 'user' && msg.status !== 'read') {
+                                msg.status = 'read';
+                                changed = true;
+                            }
+                        });
+                        if (changed) { renderMessages(false); throttledSaveData(); }
+                    }, readDelay);
 
-            if (!shouldIgnore) {
-        if (settings.typingIndicatorEnabled) {
-            const tiWrapper = document.getElementById('typing-indicator-wrapper');
-            const tiLabel = document.getElementById('typing-indicator-label');
-            const tiAvatar = document.getElementById('typing-indicator-avatar');
-            if (tiLabel) tiLabel.textContent = (settings.partnerName || '对方') + ' 正在输入';
-            if (tiWrapper) { 
-                positionTypingIndicator(); 
-                tiWrapper.style.display = 'block'; 
-            }
-            if (tiAvatar) {
-                const partnerImg = DOMElements.partner.avatar.querySelector('img');
-                tiAvatar.innerHTML = partnerImg ? `<img src="${partnerImg.src}">` : '<i class="fas fa-user"></i>';
-            }
-            if (DOMElements.chatContainer) DOMElements.chatContainer.scrollTop = DOMElements.chatContainer.scrollHeight;
-        }
-        window._pendingReplyTimer = setTimeout(() => {
-            window._pendingReplyTimer = null;
-            simulateReply();
-        }, randomDelay);
-    }
-}
-};
+                    if (!shouldIgnore) {
+                        if (settings.typingIndicatorEnabled) {
+                            const tiWrapper = document.getElementById('typing-indicator-wrapper');
+                            const tiLabel = document.getElementById('typing-indicator-label');
+                            const tiAvatar = document.getElementById('typing-indicator-avatar');
+                            if (tiLabel) tiLabel.textContent = (settings.partnerName || '对方') + ' 正在输入';
+                            if (tiWrapper) { 
+                                positionTypingIndicator(); 
+                                tiWrapper.style.display = 'block'; 
+                            }
+                            if (tiAvatar && DOMElements.partner && DOMElements.partner.avatar) {
+                                const partnerImg = DOMElements.partner.avatar.querySelector('img');
+                                tiAvatar.innerHTML = partnerImg ? `<img src="${partnerImg.src}">` : '<i class="fas fa-user"></i>';
+                            }
+                            if (DOMElements.chatContainer) DOMElements.chatContainer.scrollTop = DOMElements.chatContainer.scrollHeight;
+                        }
+                        window._pendingReplyTimer = setTimeout(() => {
+                            window._pendingReplyTimer = null;
+                            simulateReply(true); // 传入 true 表示已在发信处完成前置随机等待
+                        }, randomDelay);
+                    }
+                }
+            };
 
-            if (imageFile) {
+            if (imageOverride) {
+                createMessage(imageOverride);
+            } else if (imageFile) {
                 showNotification('正在优化图片...', 'info', 1500);
                 optimizeImage(imageFile).then(createMessage).catch(() => showNotification('图片处理失败', 'error'));
             } else {
                 createMessage();
             }
-            DOMElements.imageInput.value = '';
+            if (DOMElements.imageInput) DOMElements.imageInput.value = '';
         }
 
         function toggleBatchMode() {
@@ -1439,7 +1456,7 @@ if (!isBatchMode && type === 'normal') {
             }
         };
 
-        function simulateReply() {
+        function simulateReply(hasPreDelay = false) {
             function showTypingIndicator() {
                 window.showTypingIndicator();
             }
@@ -1454,7 +1471,7 @@ if (!isBatchMode && type === 'normal') {
                 renderMessages(false); throttledSaveData();
             }
 
-if (partnerPersonas && partnerPersonas.length > 0 && Math.random() < 0.3) {
+            if (partnerPersonas && partnerPersonas.length > 0 && Math.random() < 0.3) {
                 const currentPool = [
                     ...partnerPersonas
                 ];
@@ -1471,6 +1488,7 @@ if (partnerPersonas && partnerPersonas.length > 0 && Math.random() < 0.3) {
                      throttledSaveData();
                 }
             }
+
             if (Math.random() < 0.03) {
                 // 对方的“拍一拍”只使用内置动作，不读取我方自定义拍一拍库
                 if (CONSTANTS.POKE_ACTIONS && CONSTANTS.POKE_ACTIONS.length > 0) {
@@ -1489,10 +1507,12 @@ if (partnerPersonas && partnerPersonas.length > 0 && Math.random() < 0.3) {
                         type: 'system'
                     });
                     if (typeof playSound === 'function') playSound('partner_poke');
-                (function(){try{if(window._typingIndicatorAutoHideTimer){clearTimeout(window._typingIndicatorAutoHideTimer);window._typingIndicatorAutoHideTimer=null;}}catch(e){}var _tiW=document.getElementById('typing-indicator-wrapper');if(_tiW){var _tiInner=_tiW.querySelector('.typing-indicator');if(_tiInner){_tiInner.classList.add('hiding');setTimeout(function(){_tiW.style.display='none';if(_tiInner)_tiInner.classList.remove('hiding');},240);}else{_tiW.style.display='none';}}})();
-        return;
-    }
-}
+                    if (typeof window.hideTypingIndicator === 'function') {
+                        window.hideTypingIndicator();
+                    }
+                    return;
+                }
+            }
 
             const replyCount = Math.random() < 0.75 ? 1: (Math.random() < 0.95 ? 2: 3);
             if (!customReplies || customReplies.length === 0) {
@@ -1522,138 +1542,151 @@ if (partnerPersonas && partnerPersonas.length > 0 && Math.random() < 0.3) {
 
             // 确认有可用回复后再展示“正在输入中”，避免空转
             showTypingIndicator();
-            if (window._simulateReplyTimers && window._simulateReplyTimers.length) {
-                window._simulateReplyTimers.forEach(t => clearTimeout(t));
-            }
-            window._simulateReplyTimers = [];
+            window._activeReplyTimers = window._activeReplyTimers || [];
 
             let delay = 0;
             const recentUserMsgs = settings.replyEnabled
-                ? messages.filter(m => m.sender === 'user' && m.text).slice(-10)
+                ? messages.filter(m => m.sender === 'user' && (m.text || m.image)).slice(-10)
                 : [];
+
             for (let i = 0; i < replyCount; i++) {
-                if (i > 0) {
-                    const delayRange = Math.max(0, (settings.replyDelayMax || 7000) - (settings.replyDelayMin || 3000));
-                    delay += (settings.replyDelayMin || 3000) + Math.random() * delayRange;
+                if (hasPreDelay) {
+                    // 若外部发信已等待过前置随机延时，首条回复即时发出，多条回复则按自然间隔递增
+                    delay = (i === 0) ? 120 : (delay + 700 + Math.random() * 800);
                 } else {
-                    delay = 120;
+                    // 若无外部前置等待（如点击继续说），首条使用配置延时，后续回复使用自然停顿
+                    const delayRange = settings.replyDelayMax - settings.replyDelayMin;
+                    if (i === 0) {
+                        delay = settings.replyDelayMin + Math.random() * delayRange;
+                    } else {
+                        delay += 700 + Math.random() * 800;
+                    }
                 }
+
                 const timerId = setTimeout(() => {
+                    window._activeReplyTimers = (window._activeReplyTimers || []).filter(t => t !== timerId);
                     try {
-                    const replyPool = replyPoolOnce;
-                    // 被屏蔽或无效项直接换下一个，尽量保证每次都产出可用回复
-                    let replyText = '';
-                    const shouldConcat = !!settings.concatRepliesEnabled && Math.random() < 0.35;
-                    if (shouldConcat && replyPool.length > 0) {
-                        // 预先去重，确保气泡内抽取绝对不重复且无死循环风险
-                        const uniquePool = Array.from(new Set(replyPool));
-                        const maxPossible = Math.min(uniquePool.length, 3);
-                        const targetCount = Math.random() < 0.75 ? 2 : 3;
-                        const pickCount = Math.min(targetCount, maxPossible);
-                        const shuffled = [...uniquePool].sort(() => Math.random() - 0.5);
-                        const pickedCards = shuffled.slice(0, pickCount);
-                        if (pickedCards.length > 0) {
-                            replyText = pickedCards.join(' ');
-                        }
-                    }
-
-                    if (!replyText) {
-                        for (let t = 0; t < 6; t++) {
-                            const picked = replyPool[Math.floor(Math.random() * replyPool.length)];
-                            if (picked && String(picked).trim()) {
-                                replyText = String(picked).trim();
-                                break;
+                        const replyPool = replyPoolOnce;
+                        let replyText = '';
+                        const shouldConcat = !!settings.concatRepliesEnabled && Math.random() < 0.35;
+                        if (shouldConcat && replyPool.length > 0) {
+                            const targetCount = Math.random() < 0.75 ? 2 : 3;
+                            const poolCopy = [...replyPool];
+                            const pickedCards = [];
+                            while (pickedCards.length < targetCount && poolCopy.length > 0) {
+                                const randIdx = Math.floor(Math.random() * poolCopy.length);
+                                const candidate = String(poolCopy.splice(randIdx, 1)[0] || '').trim();
+                                if (candidate && !pickedCards.includes(candidate)) {
+                                    pickedCards.push(candidate);
+                                }
+                            }
+                            if (pickedCards.length > 0) {
+                                replyText = pickedCards.join(' ');
                             }
                         }
-                    }
-                    if (!replyText) {
-                        if (i === replyCount - 1 && typeof window.hideTypingIndicator === 'function') {
-                            window.hideTypingIndicator();
-                        }
-                        return;
-                    }
 
-                    let disabledStickerItems = new Set();
-                    try {
-                        const raw = localStorage.getItem('disabledStickerItems');
-                        if (raw) disabledStickerItems = new Set(JSON.parse(raw));
-                    } catch (e) {}
-                    const enabledStickerPool = (stickerLibrary || []).filter(s => !disabledStickerItems.has(s));
-                    const shouldSendSticker = enabledStickerPool.length > 0 && Math.random() < 0.2;
-
-                    let finalText = replyText;
-                    let separateEmoji = null;
-                    if (customEmojis && customEmojis.length > 0 && Math.random() < 0.2) {
-                        const emoji = customEmojis[Math.floor(Math.random() * customEmojis.length)];
-                        if (settings.emojiMixEnabled !== false) {
-                            finalText = Math.random() < 0.5
-                                ? emoji + ' ' + replyText
-                                : replyText + ' ' + emoji;
-                        } else {
-                            separateEmoji = emoji;
-                        }
-                    }
-
-                    addMessage({
-                        id: Date.now() + i,
-                        sender: settings.partnerName || '对方',
-                        text: finalText,
-                        timestamp: new Date(),
-                        status: 'received',
-                        favorited: false,
-                        note: null,
-                        replyTo: (i === 0 && recentUserMsgs.length > 0 && Math.random() < 0.3)
-                            ? (function(){ const m = recentUserMsgs[Math.floor(Math.random() * recentUserMsgs.length)]; return { id: m.id, text: m.text, sender: m.sender }; })()
-                            : null,
-                        type: 'normal'
-                    });
-                    if (typeof window._sendPartnerNotification === 'function') {
-                        window._sendPartnerNotification(settings.partnerName || '对方', finalText);
-                    }
-                    playSound('message');
-
-                    if (shouldSendSticker) {
-                        const randomSticker = enabledStickerPool[Math.floor(Math.random() * enabledStickerPool.length)];
-                        setTimeout(() => {
-                            addMessage({
-                                id: Date.now() + i + 2000,
-                                sender: settings.partnerName || '对方',
-                                text: '',
-                                timestamp: new Date(),
-                                image: randomSticker,
-                                status: 'received',
-                                favorited: false,
-                                note: null,
-                                type: 'normal'
-                            });
-                            playSound('message');
-                            if (typeof window._sendPartnerNotification === 'function') {
-                                window._sendPartnerNotification(settings.partnerName || '对方', '[表情]');
+                        if (!replyText) {
+                            for (let t = 0; t < 6; t++) {
+                                const picked = replyPool[Math.floor(Math.random() * replyPool.length)];
+                                if (picked && String(picked).trim()) {
+                                    replyText = String(picked).trim();
+                                    break;
+                                }
                             }
-                        }, 400 + Math.random() * 600);
-                    }
-
-                    if (separateEmoji) {
-                        setTimeout(() => {
-                            addMessage({
-                                id: Date.now() + i + 1000,
-                                sender: settings.partnerName || '对方',
-                                text: separateEmoji,
-                                timestamp: new Date(),
-                                status: 'received',
-                                favorited: false,
-                                note: null,
-                                type: 'normal'
-                            });
-                            playSound('message');
-                        }, 300 + Math.random() * 400);
-                    }
-
-                    if (i === replyCount - 1) {
-                        if (typeof window.hideTypingIndicator === 'function') {
-                            window.hideTypingIndicator();
                         }
-                    }
+                        if (!replyText && i === replyCount - 1) {
+                            if (typeof window.hideTypingIndicator === 'function') window.hideTypingIndicator();
+                            return;
+                        }
+
+                        let disabledStickerItems = new Set();
+                        try {
+                            const raw = localStorage.getItem('disabledStickerItems');
+                            if (raw) disabledStickerItems = new Set(JSON.parse(raw));
+                        } catch (e) {}
+                        const enabledStickerPool = (stickerLibrary || []).filter(s => !disabledStickerItems.has(s));
+                        const shouldSendSticker = enabledStickerPool.length > 0 && Math.random() < 0.2;
+
+                        let finalText = replyText;
+                        let separateEmoji = null;
+                        if (customEmojis && customEmojis.length > 0 && Math.random() < 0.2) {
+                            const emoji = customEmojis[Math.floor(Math.random() * customEmojis.length)];
+                            if (settings.emojiMixEnabled !== false) {
+                                finalText = Math.random() < 0.5
+                                    ? emoji + ' ' + replyText
+                                    : replyText + ' ' + emoji;
+                            } else {
+                                separateEmoji = emoji;
+                            }
+                        }
+
+                        addMessage({
+                            id: Date.now() + i,
+                            sender: settings.partnerName || '对方',
+                            text: finalText,
+                            timestamp: new Date(),
+                            status: 'received',
+                            favorited: false,
+                            note: null,
+                            replyTo: (i === 0 && recentUserMsgs.length > 0 && Math.random() < 0.3)
+                                ? (function(){ 
+                                    const m = recentUserMsgs[Math.floor(Math.random() * recentUserMsgs.length)]; 
+                                    return { id: m.id, text: m.text || '', image: m.image || null, sender: m.sender }; 
+                                })()
+                                : null,
+                            type: 'normal'
+                        });
+                        if (typeof window._sendPartnerNotification === 'function') {
+                            window._sendPartnerNotification(settings.partnerName || '对方', finalText);
+                        }
+                        playSound('message');
+
+                        if (shouldSendSticker) {
+                            const randomSticker = enabledStickerPool[Math.floor(Math.random() * enabledStickerPool.length)];
+                            const stickerTimer = setTimeout(() => {
+                                window._activeReplyTimers = (window._activeReplyTimers || []).filter(t => t !== stickerTimer);
+                                addMessage({
+                                    id: Date.now() + i + 2000,
+                                    sender: settings.partnerName || '对方',
+                                    text: '',
+                                    timestamp: new Date(),
+                                    image: randomSticker,
+                                    status: 'received',
+                                    favorited: false,
+                                    note: null,
+                                    type: 'normal'
+                                });
+                                playSound('message');
+                                if (typeof window._sendPartnerNotification === 'function') {
+                                    window._sendPartnerNotification(settings.partnerName || '对方', '[表情]');
+                                }
+                            }, 400 + Math.random() * 600);
+                            window._activeReplyTimers.push(stickerTimer);
+                        }
+
+                        if (separateEmoji) {
+                            const emojiTimer = setTimeout(() => {
+                                window._activeReplyTimers = (window._activeReplyTimers || []).filter(t => t !== emojiTimer);
+                                addMessage({
+                                    id: Date.now() + i + 1000,
+                                    sender: settings.partnerName || '对方',
+                                    text: separateEmoji,
+                                    timestamp: new Date(),
+                                    status: 'received',
+                                    favorited: false,
+                                    note: null,
+                                    type: 'normal'
+                                });
+                                playSound('message');
+                            }, 300 + Math.random() * 400);
+                            window._activeReplyTimers.push(emojiTimer);
+                        }
+
+                        if (i === replyCount - 1) {
+                            if (typeof window.hideTypingIndicator === 'function') {
+                                window.hideTypingIndicator();
+                            }
+                        }
                     } catch (e) {
                         console.error('[simulateReply] 渲染/回填出错:', e);
                         if (typeof window.hideTypingIndicator === 'function') {
@@ -1661,7 +1694,8 @@ if (partnerPersonas && partnerPersonas.length > 0 && Math.random() < 0.3) {
                         }
                     }
                 }, delay);
-                if (window._simulateReplyTimers) window._simulateReplyTimers.push(timerId);
+
+                window._activeReplyTimers.push(timerId);
             }
         }
 

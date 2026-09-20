@@ -14,6 +14,7 @@ function setupEventListeners() {
         initThemeSchemes();
         
         initComboMenu(); 
+        initExpandMenu();
         
     } catch (e) {
         console.error("事件绑定过程中发生错误:", e);
@@ -94,7 +95,8 @@ if (target.classList.contains('delete-btn')) {
                     currentReplyTo = {
                         id: message.id,
                         sender: message.sender,
-                        text: message.text
+                        text: message.text || '',
+                        image: message.image || null
                     };
                     updateReplyPreview();
                     DOMElements.messageInput.focus();
@@ -2408,27 +2410,28 @@ playlist.style.top = (rect.top + (player.classList.contains('collapsed') ? 65 : 
                 sendBtn.addEventListener('click',
                     () => {
                         if (currentImageData) {
-
-                            addMessage({
-                                id: Date.now(),
-                                sender: 'user',
-                                text: '',
-                                timestamp: new Date(),
-                                image: currentImageData,
-                                status: 'sent',
-                                favorited: false,
-                                note: null,
-                                replyTo: currentReplyTo,
-                                type: 'normal'
-                            });
-                            playSound('send');
-                            currentReplyTo = null;
-                            updateReplyPreview();
-                            const delayRange = settings.replyDelayMax - settings.replyDelayMin;
-                            const randomDelay = settings.replyDelayMin + Math.random() * delayRange;
-                            setTimeout(simulateReply, randomDelay);
-
-
+                            if (typeof sendMessage === 'function') {
+                                sendMessage('', 'normal', currentImageData);
+                            } else {
+                                addMessage({
+                                    id: Date.now(),
+                                    sender: 'user',
+                                    text: '',
+                                    timestamp: new Date(),
+                                    image: currentImageData,
+                                    status: 'sent',
+                                    favorited: false,
+                                    note: null,
+                                    replyTo: currentReplyTo,
+                                    type: 'normal'
+                                });
+                                playSound('send');
+                                currentReplyTo = null;
+                                updateReplyPreview();
+                                const delayRange = settings.replyDelayMax - settings.replyDelayMin;
+                                const randomDelay = settings.replyDelayMin + Math.random() * delayRange;
+                                setTimeout(simulateReply, randomDelay);
+                            }
                             closeModal();
                         }
                     });
@@ -2560,3 +2563,42 @@ window.exitCollapseMode = function() {
         setTimeout(tryApply, 400);
     }
 })();
+
+function initExpandMenu() {
+    const expandBtn = document.getElementById('expand-more-btn');
+    const popover = document.getElementById('chat-expand-popover');
+    if (!expandBtn || !popover) return;
+    if (expandBtn.dataset.initialized) return;
+
+    expandBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isActive = popover.classList.contains('active');
+        if (isActive) {
+            popover.classList.remove('active');
+            expandBtn.classList.remove('active');
+        } else {
+            const stickerPicker = document.getElementById('user-sticker-picker');
+            if (stickerPicker) stickerPicker.classList.remove('active');
+            popover.classList.add('active');
+            expandBtn.classList.add('active');
+        }
+    });
+
+    popover.querySelectorAll('.chat-expand-item-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            popover.classList.remove('active');
+            expandBtn.classList.remove('active');
+        });
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!popover.contains(e.target) && !expandBtn.contains(e.target)) {
+            popover.classList.remove('active');
+            expandBtn.classList.remove('active');
+        }
+    });
+
+    expandBtn.dataset.initialized = 'true';
+}
+window.initExpandMenu = initExpandMenu;
+

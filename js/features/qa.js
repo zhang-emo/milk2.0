@@ -152,11 +152,14 @@
             const chosenIndex = Math.floor(Math.random() * options.length);
             const chosenOption = options[chosenIndex];
 
-            // 更新聊天记录中对应卡片的 selectedOption
+            // 更新聊天记录中对应卡片的 selectedOption 并标记已读
             if (typeof messages !== 'undefined' && Array.isArray(messages)) {
                 const targetMsg = messages.find(m => String(m.id) === String(messageId));
-                if (targetMsg && targetMsg.qa) {
-                    targetMsg.qa.selectedOption = chosenOption;
+                if (targetMsg) {
+                    targetMsg.status = 'read';
+                    if (targetMsg.qa) {
+                        targetMsg.qa.selectedOption = chosenOption;
+                    }
                 }
             }
 
