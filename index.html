@@ -25,6 +25,25 @@
     <link rel="stylesheet" href="css/styles.css">
 
     <style id="css-live-preview-style"></style>
+    <script>
+        if ('scrollRestoration' in history) {
+            try { history.scrollRestoration = 'manual'; } catch(e) {}
+        }
+        function _resetViewportScroll() {
+            if (window.scrollY !== 0 || window.scrollX !== 0) window.scrollTo(0, 0);
+            if (document.documentElement && document.documentElement.scrollTop !== 0) document.documentElement.scrollTop = 0;
+            if (document.body && document.body.scrollTop !== 0) document.body.scrollTop = 0;
+        }
+        _resetViewportScroll();
+        window.addEventListener('scroll', _resetViewportScroll, { passive: true });
+        window.addEventListener('resize', _resetViewportScroll, { passive: true });
+        window.addEventListener('orientationchange', _resetViewportScroll, { passive: true });
+        document.addEventListener('DOMContentLoaded', _resetViewportScroll);
+        document.addEventListener('focusin', function() {
+            requestAnimationFrame(_resetViewportScroll);
+            setTimeout(_resetViewportScroll, 100);
+        });
+    </script>
 </head>
 <body>
 <div id="splash-declaration">

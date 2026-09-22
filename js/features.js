@@ -150,18 +150,19 @@
 
     function _applyHeader() {
         var en = _get();
+        var isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.innerWidth <= 768;
         var id = 'header-clear-override';
         var t  = document.getElementById(id);
         if (!t) { t = document.createElement('style'); t.id = id; document.head.appendChild(t); }
-        if (en) {
+        if (en || isMobile) {
             t.textContent = '.header { opacity: 1 !important; }';
         } else {
             t.textContent = [
-                '@media (hover: hover) {',
-                '  .header { opacity: 0.5 !important; transition: opacity 0.3s ease !important; }',
+                '@media (hover: hover) and (pointer: fine) {',
+                '  .header { opacity: 0.85 !important; transition: opacity 0.3s ease !important; }',
                 '  .header:hover { opacity: 1 !important; }',
                 '}',
-                '@media (hover: none) {',
+                '@media (hover: none), (pointer: coarse) {',
                 '  .header { opacity: 1 !important; }',
                 '}'
             ].join(' ');
