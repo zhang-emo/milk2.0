@@ -157,8 +157,13 @@
             t.textContent = '.header { opacity: 1 !important; }';
         } else {
             t.textContent = [
-                '.header { opacity: 0.5 !important; transition: opacity 0.3s ease !important; }',
-                '.header:hover { opacity: 1 !important; }'
+                '@media (hover: hover) {',
+                '  .header { opacity: 0.5 !important; transition: opacity 0.3s ease !important; }',
+                '  .header:hover { opacity: 1 !important; }',
+                '}',
+                '@media (hover: none) {',
+                '  .header { opacity: 1 !important; }',
+                '}'
             ].join(' ');
         }
     }

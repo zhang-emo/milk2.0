@@ -534,6 +534,7 @@
             max-width: 100vw;
             overflow-x: hidden !important;
             overscroll-behavior-x: none;
+            overscroll-behavior-y: none;
             margin: 0;
             padding: 0;
         }
@@ -544,6 +545,7 @@
             color: var(--text-primary);
             transition: background-color 0.5s ease, color 0.5s ease;
             height: 100vh;
+            height: 100dvh;
             display: flex;
             flex-direction: column;
             overflow: hidden; 
